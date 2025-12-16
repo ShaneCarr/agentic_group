@@ -1,0 +1,440 @@
+commit 6b004774a8e7e20995e3d2ce8bf3740ae23e79cd
+Author: Your Name <you@example.com>
+Date:   Mon Dec 15 21:59:24 2025 -0800
+
+    initial commit
+
+diff --git a/.vscode/settings.json b/.vscode/settings.json
+new file mode 100644
+index 0000000..167bf27
+--- /dev/null
++++ b/.vscode/settings.json
+@@ -0,0 +1,7 @@
++{
++    "workbench.tree.indent": 25,
++    "workbench.tree.renderIndentGuides": "always",
++    "editor.fontFamily": "BlexMono Nerd Font Mono",
++    "editor.fontSize": 16,
++    "editor.codeLensFontFamily": "BlexMono Nerd Font Mono"
++}
+\ No newline at end of file
+diff --git a/agentic/__init__.py b/PROJECT_NORTH_STAR.MD
+similarity index 100%
+rename from agentic/__init__.py
+rename to PROJECT_NORTH_STAR.MD
+diff --git a/pyproject.toml b/pyproject.toml
+new file mode 100644
+index 0000000..4ea9b7a
+--- /dev/null
++++ b/pyproject.toml
+@@ -0,0 +1,23 @@
++[build-system]
++requires = ["setuptools>=68", "wheel"]
++build-backend = "setuptools.build_meta"
++
++[project]
++name = "agentic-decision-engine"
++version = "0.1.0"
++description = "Local-first agentic decision frameworks (Council, DXO, Ensemble)"
++readme = "README.md"
++requires-python = ">=3.11"
++dependencies = [
++  "httpx>=0.27.0",
++]
++
++[project.optional-dependencies]
++dev = [
++  "pytest>=8.0.0",
++  "pytest-asyncio>=0.23.0",
++]
++
++[tool.pytest.ini_options]
++asyncio_mode = "auto"
++testpaths = ["tests"]
+diff --git a/smol-training-playbook.pdf b/smol-training-playbook.pdf
+new file mode 100644
+index 0000000..beea5d0
+Binary files /dev/null and b/smol-training-playbook.pdf differ
+diff --git a/agentic/config.py b/src/agentic/__init__.py
+similarity index 100%
+rename from agentic/config.py
+rename to src/agentic/__init__.py
+diff --git a/src/agentic/cli/main .py b/src/agentic/cli/main .py
+new file mode 100644
+index 0000000..f94b117
+--- /dev/null
++++ b/src/agentic/cli/main .py	
+@@ -0,0 +1,54 @@
++import sys
++import uuid
++import asyncio
++from agentic.types import DecisionTask
++from agentic.frameworks.council import run_council
++from agentic.frameworks.dxo import run_dxo
++from agentic.frameworks.ensemble import run_ensemble
++
++
++async def main():
++    framework = sys.argv[1]
++    question = " ".join(sys.argv[2:])
++
++    task = DecisionTask(
++        id=str(uuid.uuid4()),
++        question=question,
++        framework=framework,
++        framework_config={},
++    )
++
++    if framework == "council":
++        task.framework_config = {
++            "members": [
++                {"id": "alpha", "model": "small"},
++                {"id": "beta", "model": "large"},
++            ],
++            "chair": "large",
++        }
++        result = await run_council(task)
++
++    elif framework == "dxo":
++        task.framework_config = {
++            "researcher": "small",
++            "reviewer": "small",
++            "synthesizer": "large",
++        }
++        result = await run_dxo(task)
++
++    elif framework == "ensemble":
++        task.framework_config = {
++            "models": ["small", "large"],
++            "aggregator": "large",
++        }
++        result = await run_ensemble(task)
++
++    else:
++        raise ValueError("Unknown framework")
++
++    print("\nFINAL ANSWER\n============")
++    print(result.final_answer)
++
++
++if __name__ == "__main__":
++    asyncio.run(main())
+diff --git a/agentic/logging.py b/src/agentic/config.py
+similarity index 100%
+rename from agentic/logging.py
+rename to src/agentic/config.py
+diff --git a/agentic/models.py b/src/agentic/frameworks/council.py
+similarity index 100%
+rename from agentic/models.py
+rename to src/agentic/frameworks/council.py
+diff --git a/agentic/types.py b/src/agentic/frameworks/dxo.py
+similarity index 100%
+rename from agentic/types.py
+rename to src/agentic/frameworks/dxo.py
+diff --git a/pyproject.toml  b/src/agentic/frameworks/ensemble.py
+similarity index 100%
+rename from pyproject.toml 
+rename to src/agentic/frameworks/ensemble.py
+diff --git a/src/agentic/local.py b/src/agentic/local.py
+new file mode 100644
+index 0000000..5d4c042
+--- /dev/null
++++ b/src/agentic/local.py
+@@ -0,0 +1,109 @@
++# Standard library import.
++# Used here to read environment variables.
++import os
++
++# Third-party HTTP client library.
++# httpx is roughly "requests + asyncio + sane defaults".
++import httpx
++
++# Typing helper: List[T] means "a list containing elements of type T".
++# (In Python 3.9+ you can also write list[T].)
++from typing import List
++
++# Relative import from your own package.
++# "..types" means "go up one package level, then import types.py".
++# We're importing the dataclasses you defined earlier.
++from ..types import ModelSpec, ChatMessage
++
++
++# Read an environment variable if it exists.
++# If not set, default to "http://localhost:8000".
++#
++# This is how you avoid hard-coding deployment details.
++# Think: process-level config, not code-level config.
++VLLM_BASE_URL = os.environ.get("VLLM_BASE_URL", "http://localhost:8000")
++
++
++# Define an *async* function.
++# Calling this returns a coroutine; you must 'await' it.
++#
++# Signature:
++# - spec: a ModelSpec object (contains model id, cost class, provider)
++# - messages: a list of ChatMessage objects
++# - returns: a string (the model's text output)
++async def call_local_model(spec: ModelSpec, messages: List[ChatMessage]) -> str:
++
++    # Build the JSON payload expected by the OpenAI-compatible API.
++    #
++    # This is a normal Python dictionary.
++    payload = {
++        # spec.id is a string like "llama-3.1-8b"
++        "model": spec.id,
++
++        # Convert each ChatMessage object into a plain dict.
++        #
++        # IMPORTANT:
++        # This is NOT a dict comprehension.
++        # This is a LIST comprehension:
++        #
++        #   [expression for item in iterable]
++        #
++        # For each ChatMessage 'm', m.__dict__ is:
++        #   {"role": "...", "content": "..."}
++        #
++        # Equivalent expanded form:
++        #
++        # messages_as_dicts = []
++        # for m in messages:
++        #     messages_as_dicts.append(m.__dict__)
++        #
++        # __dict__ works because ChatMessage is a dataclass
++        # and stores its fields as attributes.
++        "messages": [m.__dict__ for m in messages],
++
++        # Hard limit on generated tokens.
++        "max_tokens": 1024,
++
++        # Controls randomness.
++        # 0.0 = deterministic
++        # higher = more variation
++        "temperature": 0.7,
++    }
++
++    # Create an asynchronous HTTP client.
++    #
++    # 'async with' means:
++    # - open the client
++    # - guarantee cleanup (connection close) when block exits
++    #
++    # timeout=60.0 applies to the full request lifecycle.
++    async with httpx.AsyncClient(timeout=60.0) as client:
++
++        # Send an HTTP POST request.
++        #
++        # await = suspend this coroutine until the network call finishes.
++        resp = await client.post(
++            # Build the full URL by concatenating base + path
++            f"{VLLM_BASE_URL}/v1/chat/completions",
++
++            # Automatically JSON-encode the payload dict
++            # and set Content-Type: application/json
++            json=payload,
++        )
++
++        # Raise an exception for HTTP errors (4xx / 5xx).
++        # This is fail-fast, not silent failure.
++        resp.raise_for_status()
++
++        # Parse response body as JSON.
++        # Result is a Python dict (nested lists/dicts).
++        data = resp.json()
++
++    # Extract the model's text output.
++    #
++    # data["choices"] is a list
++    # data["choices"][0] is the first completion
++    # ["message"]["content"] is the generated text
++    #
++    # This matches the OpenAI chat completion schema.
++    return data["choices"][0]["message"]["content"]
+diff --git a/src/agentic/logging.py b/src/agentic/logging.py
+new file mode 100644
+index 0000000..e69de29
+diff --git a/src/agentic/models.py b/src/agentic/models.py
+new file mode 100644
+index 0000000..8f29e42
+--- /dev/null
++++ b/src/agentic/models.py
+@@ -0,0 +1,27 @@
++from typing import Dict, List
++from .types import ModelSpec, ChatMessage, CostClass
++from .providers.local import call_local_model
++
++
++MODELS: Dict[str, ModelSpec] = {
++    "small": ModelSpec(
++        key="small",
++        id="Qwen/Qwen2.5-Coder-7B-Instruct",
++        provider="local",
++        cost_class=CostClass.FREE,
++    ),
++    "large": ModelSpec(
++        key="large",
++        id="Qwen/Qwen2.5-Coder-32B-Instruct",
++        provider="local",
++        cost_class=CostClass.FREE,
++    ),
++}
++
++
++async def invoke_model(model_key: str, messages: List[ChatMessage]) -> str:
++    spec = MODELS.get(model_key)
++    if not spec:
++        raise ValueError(f"Unknown model: {model_key}")
++
++    return await call_local_model(spec, messages)
+diff --git a/src/agentic/providers/local.py b/src/agentic/providers/local.py
+new file mode 100644
+index 0000000..369bdc7
+--- /dev/null
++++ b/src/agentic/providers/local.py
+@@ -0,0 +1,25 @@
++import os
++import httpx
++from typing import List
++from ..types import ModelSpec, ChatMessage
++
++VLLM_BASE_URL = os.environ.get("VLLM_BASE_URL", "http://localhost:8000")
++
++
++async def call_local_model(spec: ModelSpec, messages: List[ChatMessage]) -> str:
++    payload = {
++        "model": spec.id,
++        "messages": [m.__dict__ for m in messages],
++        "max_tokens": 1024,
++        "temperature": 0.7,
++    }
++
++    async with httpx.AsyncClient(timeout=60.0) as client:
++        resp = await client.post(
++            f"{VLLM_BASE_URL}/v1/chat/completions",
++            json=payload,
++        )
++        resp.raise_for_status()
++        data = resp.json()
++
++    return data["choices"][0]["message"]["content"]
+diff --git a/src/agentic/types.py b/src/agentic/types.py
+new file mode 100644
+index 0000000..41de08b
+--- /dev/null
++++ b/src/agentic/types.py
+@@ -0,0 +1,90 @@
++# Enables postponed evaluation of type annotations.
++# In practice: it lets you refer to types that are defined later in the file
++# without quoting them. Useful for self-referential types and forward references.
++# Think: "compiler option that relaxes ordering constraints for type names".
++from __future__ import annotations
++
++# dataclass = generates boilerplate: __init__, __repr__, __eq__, etc.
++# Roughly like a C# record or a Java/Kotlin data class.
++from dataclasses import dataclass
++
++# Enum = like C#/Java enum, but can also inherit from str for string-like behavior.
++from enum import Enum
++
++# typing tools: these are mostly for static type checkers (mypy/pyright) and IDE help.
++from typing import Literal, List, Dict, Any
++
++
++# Provider is a TYPE ALIAS.
++# Literal["local"] means: "the only allowed value is exactly the string 'local'"
++# (for static type checkers).
++#
++# C# analogy: a string that is constrained to a specific constant isn't a built-in feature,
++# but you'd approximate with an enum or a union type in TypeScript.
++Provider = Literal["local"]
++
++
++# Enum with string values.
++# Inheriting from (str, Enum) means: each enum member behaves like a string too.
++# e.g. str(CostClass.FREE) -> "CostClass.FREE" normally, but CostClass.FREE.value -> "free"
++class CostClass(str, Enum):
++    FREE = "free"
++    CHEAP = "cheap"
++    PREMIUM = "premium"
++
++
++# frozen=True makes instances immutable (like a C# record with init-only properties).
++# After creation, you can't modify fields.
++@dataclass(frozen=True)
++class ModelSpec:
++    # Field annotations: key is a string.
++    # This is a type hint + also used by dataclass to build the constructor signature.
++    key: str           # logical name, e.g. "small", "large"
++
++    id: str            # actual model id in vLLM (naming is a bit confusing: id shadows builtin name "id")
++    provider: Provider # must be the literal string "local" (per type checker)
++    cost_class: CostClass  # must be one of the CostClass enum values
++
++
++# Represents a normal chat message (OpenAI-style roles).
++@dataclass
++class ChatMessage:
++    # Literal union: role must be exactly one of these strings.
++    role: Literal["system", "user", "assistant"]
++    content: str
++
++
++# Represents a message produced by a specific agent role (alpha/reviewer/etc).
++@dataclass
++class AgentMessage:
++    role_id: str        # e.g. "alpha", "reviewer", "chair", etc.
++    model_key: str      # references ModelSpec.key (like a foreign key)
++    stage: str          # e.g. "initial", "critique", "synthesis" (could also be a Literal/Enum later)
++    content: str
++
++
++# Represents a decision "job" the system should run.
++@dataclass
++class DecisionTask:
++    id: str
++    question: str
++
++    # framework must be one of these exact strings.
++    framework: Literal["council", "dxo", "ensemble"]
++
++    # Arbitrary config blob per framework.
++    # Dict[str, Any] means: keys are strings, values can be anything.
++    framework_config: Dict[str, Any]
++
++
++# Represents the final output of running the task.
++@dataclass
++class DecisionResult:
++    task_id: str
++    final_answer: str
++
++    # List[AgentMessage] = a list of AgentMessage objects.
++    messages: List[AgentMessage]
++
++    # Metadata is another arbitrary blob: timings, token counts, model ids, etc.
++    metadata: Dict[str, Any]
+diff --git a/src/readme.md b/src/readme.md
+new file mode 100644
+index 0000000..e69de29
+diff --git a/tests/test_models.py b/tests/test_models.py
+new file mode 100644
+index 0000000..84131f7
+--- /dev/null
++++ b/tests/test_models.py
+@@ -0,0 +1,16 @@
++import pytest
++from agentic.models import invoke_model, MODELS
++from agentic.types import ChatMessage
++
++@pytest.mark.asyncio
++async def test_invoke_model(monkeypatch):
++    async def fake_call(spec, messages):
++        return "ok"
++
++    monkeypatch.setattr(
++        "agentic.providers.local.call_local_model",
++        fake_call,
++    )
++
++    result = await invoke_model("small", [ChatMessage("user", "hi")])
++    assert result == "ok"
