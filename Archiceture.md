@@ -54,11 +54,16 @@ tests/
 
 ```mermaid
 flowchart TB
-  CLI[cli/main.py<br/>parses args, builds DecisionTask] --> FW[frameworks/*<br/>council/dxo/ensemble]
-  FW --> INV[models.py<br/>invoke_model(model_key, messages)]
-  INV --> PROV[providers/local.py<br/>call_local_model()]
-  PROV --> VLLM[(vLLM server<br/>/v1/chat/completions)]
-  FW --> TYPES[types.py<br/>DecisionTask/Result, AgentMessage, ChatMessage]
+  CLI["CLI (agentic.cli.main)"]
+  FW["Frameworks (council / dxo / ensemble)"]
+  INV["Model Dispatcher (invoke_model)"]
+  PROV["Local Provider"]
+  VLLM["vLLM Server"]
+
+  CLI --> FW
+  FW --> INV
+  INV --> PROV
+  PROV --> VLLM
 ```
 
 ```mermaid
