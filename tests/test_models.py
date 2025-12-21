@@ -8,7 +8,7 @@ async def test_invoke_model(monkeypatch):
         return "ok"
 
     monkeypatch.setattr(
-        "agentic.providers.local.call_local_model",
+        "agentic.local.call_local_model",
         fake_call,
     )
 

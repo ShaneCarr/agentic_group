@@ -1,7 +1,8 @@
 {
     "workbench.tree.indent": 25,
     "workbench.tree.renderIndentGuides": "always",
-    "editor.fontFamily": "BlexMono Nerd Font Mono",
+    "editor.fontFamily": "Comic Sans MS, monospace",
     "editor.fontSize": 16,
-    "editor.codeLensFontFamily": "BlexMono Nerd Font Mono"
+    "editor.codeLensFontFamily": "BlexMono Nerd Font Mono",
+    "files.autoSave": "afterDelay"
 }
