@@ -9,7 +9,7 @@ def _get_provider() -> str:
     Resolve which local provider to use.
 
     LOCAL_LLM_PROVIDER:
-      - 'ollama'  -> Ollama REST API
+      - 'ollama'  -> Ollama REST API (/api/generate)
       - 'openai'  -> OpenAI-compatible API (vLLM / LM Studio / llama.cpp)
     """
     return (os.environ.get("LOCAL_LLM_PROVIDER") or "openai").strip().lower()
@@ -34,12 +34,24 @@ def _get_ollama_base_url() -> str:
     return os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
 
 
+def _flatten_messages_to_prompt(messages: List[ChatMessage]) -> str:
+    """
+    Ollama /api/generate expects a single prompt string, not an array of chat messages.
+    Build a simple, deterministic transcript that preserves role + content.
+    """
+    parts: List[str] = []
+    for m in messages:
+        parts.append(f"{m.role}:\n{m.content}")
+    parts.append("assistant:\n")
+    return "\n\n".join(parts)
+
+
 async def call_local_model(spec: ModelSpec, messages: List[ChatMessage]) -> str:
     """
     Call a local LLM backend based on LOCAL_LLM_PROVIDER.
 
     Supported providers:
-      - ollama  -> POST /api/chat
+      - ollama  -> POST /api/generate
       - openai  -> POST /v1/chat/completions (vLLM / LM Studio)
 
     Returns assistant message content as a string.
@@ -48,12 +60,9 @@ async def call_local_model(spec: ModelSpec, messages: List[ChatMessage]) -> str:
 
     async with httpx.AsyncClient(timeout=60.0) as client:
         if provider == "ollama":
-            # -------------------------
-            # Ollama Chat API
-            # -------------------------
             payload = {
                 "model": spec.id,
-                "messages": [m.__dict__ for m in messages],
+                "prompt": _flatten_messages_to_prompt(messages),
                 "stream": False,
                 "options": {
                     "temperature": 0.7,
@@ -62,13 +71,14 @@ async def call_local_model(spec: ModelSpec, messages: List[ChatMessage]) -> str:
             }
 
             resp = await client.post(
-                f"{_get_ollama_base_url()}/api/chat",
+                f"{_get_ollama_base_url()}/api/generate",
                 json=payload,
             )
             resp.raise_for_status()
             data = resp.json()
 
-            return data["message"]["content"]
+            # /api/generate returns {"response": "..."} when stream=false
+            return data["response"]
 
         # -------------------------
         # OpenAI-compatible API
