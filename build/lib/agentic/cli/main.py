@@ -21,8 +21,8 @@ async def main():
     if framework == "council":
         task.framework_config = {
             "members": [
-                {"id": "alpha", "model": "small"},
-                {"id": "beta", "model": "large"},
+                {"id": "alpha", "model": "nano"},
+                {"id": "beta", "model": "small"},
             ],
             "chair": "large",
         }
@@ -30,16 +30,16 @@ async def main():
 
     elif framework == "dxo":
         task.framework_config = {
-            "researcher": "small",
+            "researcher": "nano",
             "reviewer": "small",
-            "synthesizer": "large",
+            "synthesizer": "small",
         }
         result = await run_dxo(task)
 
     elif framework == "ensemble":
         task.framework_config = {
-            "models": ["small", "large"],
-            "aggregator": "large",
+            "models": ["small", "nano"],
+            "aggregator": "small",
         }
         result = await run_ensemble(task)
 
